@@ -2,8 +2,6 @@
 
 import pickle
 
-from tornado.util import ObjectDict as d
-
 
 class ObjectDict(dict):
     def __getattr__(self, name):
