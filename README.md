@@ -15,6 +15,7 @@ http://127.0.0.1:8888
 
 2. In your handler:
 
+```
     from sessions import SessionManager, SessionMixin
     from models import TornadoSqlaSession, db
 
@@ -38,3 +39,4 @@ http://127.0.0.1:8888
         def get(self):
             self.session.user = {'userid': 9527}  # this will auto commit
             self.write(self.session.user.userid)
+```
