@@ -10,20 +10,44 @@ SessionManager.setup(db, TornadoSqlaSession, 'sid')
 
 class BaseHandler(tornado.web.RequestHandler, SessionMixin):
     def prepare(self):
-        """if you want generate session id while"""
-        self.write(self.session.get('user'))
+        # if you want generate session id while tornado start no matter
+        # the user logged in or not:
+        self.session.setup_session_id()
 
 
 class LogoutHandler(BaseHandler):
-    def get(self):
+    def post(self):
         self.session.clear()
+        self.write('<a href="/">Home</a>')
 
 
 class MainHandler(BaseHandler):
     def get(self):
-        self.write('hello world')
-        self.write('<br>')
-        self.write('<a href="/logout">Logout</a>')
+        self.write_p(self.session.last_access)
+        self.write_p(self.session.user.userid)
+        self.write_p(self.session.not_exists_attribute)
+        self.write_p(self.session.a.b.c.d.e.f.g.etc.z)
+        self.write_p('user' in self.session)
+        
+        self.write_p('<hr>')
+        
+        self.session.user = {'userid': 9527}  # this will auto commit
+        self.session.last_access = '2014-05-12'  # again
+        
+        self.write_p(self.session.user.userid)
+        self.write_p(self.session.last_access)
+        self.write_p(self.session.not_exists_attribute)
+        self.write_p('user' in self.session)
+        
+        self.write_p('<hr>')
+        
+        self.write_p('<a href="/">Reload Page</a>')
+        self.write('<form action="/logout" method="post">'
+                   '<input type="submit" value="Logout">'
+                   '</form>')
+        
+    def write_p(self, text):
+        self.write('<p>%s</p>' % text)
 
 
 if __name__ == '__main__':

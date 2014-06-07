@@ -2,7 +2,15 @@
 
 import pickle
 
-from tornado.util import ObjectDict
+from tornado.util import ObjectDict as d
+
+
+class ObjectDict(dict):
+    def __getattr__(self, name):
+        return self.get(name, ObjectDict())
+
+    def __setattr__(self, name, value):
+        self[name] = value
 
 
 class SetupError(Exception):
@@ -13,14 +21,14 @@ class SessionIdNotExistsError(Exception):
     pass
 
 
-class SessionManager(object):
+class SessionManager(dict):
     def __init__(self, handler):
-        self.handler = handler
+        self['__dict'] = ObjectDict(handler=handler)
 
         if not hasattr(SessionManager, 'db'):
             raise SetupError('Please call SessionManager.setup() first.')
 
-        self.__setup_session_id()
+        self.setup_session_id()
 
     @classmethod
     def setup(cls, db, tb, cookie_name='session_id', **kwargs):
@@ -33,54 +41,65 @@ class SessionManager(object):
         kwargs.setdefault('expires_days', None)
         cls.cookie_settings = kwargs
 
-    @property
-    def data(self):
-        return getattr(self.tb, 'data')
-
-    def __update_last_access(self, s=None):
+    def update_last_access(self, s=None):
         import datetime
-        s = s or self.db.query(self.tb).filter_by(sid=self.session_id).first()
+        s = s or self.db.query(self.tb).filter_by(sid=self['__dict'].sid).first()
         s.last_access = datetime.datetime.now()
         self.db.commit()
 
     def get(self, key, default=None):
-        s = self.db.query(self.data).filter_by(sid=self.session_id).first()
+        default = ObjectDict()
+        data = self.get_data_dict_from_db()
+        value = data.get(key, default)
+        if isinstance(value, dict):
+            value = ObjectDict(value)
+        return value
+
+    def __getattr__(self, key):
+        return self.get(key)
+
+    def __setattr__(self, key, value):
+        return self.set(key, value)
+
+    def __contains__(self, key):
+        return key in self.get_data_dict_from_db()
+
+    def get_data_dict_from_db(self):
+        s = self.db.query(self.tb).filter_by(sid=self['__dict'].sid).first()
         if s is None:
             raise SessionIdNotExistsError('session id is not exists.')
-        self.__update_last_access()
-        data = pickle.loads(s.data)
-        return data.get(key, default)
+        self.update_last_access(s)
+        return ObjectDict(pickle.loads(s.data))
 
     def set(self, key, value):
-        s = self.db.query(self.tb).filter_by(sid=self.session_id).first()
-        if s is None:
-            raise SessionIdNotExistsError('session id is not exists.')
-        data = pickle.loads(s.data)
+        data = self.get_data_dict_from_db()
+        s = self.db.query(self.tb).filter_by(sid=self['__dict'].sid).first()
         data[key] = value
-        s.data = pickle.dumps(data)
-        self.__update_last_access(s)
+        s.data = pickle.dumps(dict(data))
+        self.update_last_access(s)
 
     def clear(self):
-        self.handler.clear_cookie(self.cookie_name)
-        self.db.query(self.tb).filter_by(sid=self.session_id).delete()
+        self['__dict'].handler.clear_cookie(self.cookie_name)
+        self.db.query(self.tb).filter_by(sid=self['__dict'].sid).delete()
         self.db.commit()
 
-    def __generate_sid_cookie(self):
+    def generate_sid(self):
         import uuid
         return str(uuid.uuid4()).replace('-', '')
 
-    def __setup_session_id(self):
-        sid = self.handler.get_secure_cookie(self.cookie_name)
+    def setup_session_id(self):
+        sid = self['__dict'].handler.get_secure_cookie(self.cookie_name)
         if sid is None:
-            sid = self.__generate_sid_cookie()
-            self.handler.set_secure_cookie(
+            sid = self.generate_sid()
+            self['__dict'].handler.set_secure_cookie(
                 self.cookie_name, sid, **self.cookie_settings)
+        if self.db.query(self.tb.sid).filter_by(sid=sid).first() is None:
             from datetime import datetime
             data = pickle.dumps({})
             s = self.tb(sid=sid, last_access=datetime.now(), data=data)
             self.db.add(s)
             self.db.commit()
-        self.session_id = sid
+        self['__dict'].sid = sid
 
 
 class SessionMixin(object):
