@@ -2,13 +2,7 @@
 
 import pickle
 
-
-class ObjectDict(dict):
-    def __getattr__(self, name):
-        return self.get(name, ObjectDict())
-
-    def __setattr__(self, name, value):
-        self[name] = value
+from tornado.util import ObjectDict
 
 
 class SetupError(Exception):
@@ -16,6 +10,10 @@ class SetupError(Exception):
 
 
 class SessionIdNotExistsError(Exception):
+    pass
+    
+    
+class SessionKeyNotExistsError(Exception):
     pass
 
 
@@ -26,7 +24,7 @@ class SessionManager(dict):
         if not hasattr(SessionManager, 'db'):
             raise SetupError('Please call SessionManager.setup() first.')
 
-        self.setup_session_id()
+        self._setup_session_id()
 
     @classmethod
     def setup(cls, db, tb, cookie_name='session_id', **kwargs):
@@ -46,7 +44,6 @@ class SessionManager(dict):
         self.db.commit()
 
     def get(self, key, default=None):
-        default = ObjectDict()
         data = self.get_data_dict_from_db()
         value = data.get(key, default)
         if isinstance(value, dict):
@@ -54,7 +51,10 @@ class SessionManager(dict):
         return value
 
     def __getattr__(self, key):
-        return self.get(key)
+        value = self.get(key);
+        if value is None:
+            raise SessionKeyNotExistsError('"%s" not in the session' % key)
+        return value
 
     def __setattr__(self, key, value):
         return self.set(key, value)
@@ -86,6 +86,9 @@ class SessionManager(dict):
         return str(uuid.uuid4()).replace('-', '')
 
     def setup_session_id(self):
+        pass
+        
+    def _setup_session_id(self):
         sid = self['__dict'].handler.get_secure_cookie(self.cookie_name)
         if sid is None:
             sid = self.generate_sid()

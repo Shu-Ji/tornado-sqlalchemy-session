@@ -18,25 +18,21 @@ class BaseHandler(tornado.web.RequestHandler, SessionMixin):
 class LogoutHandler(BaseHandler):
     def post(self):
         self.session.clear()
-        self.write('<a href="/">Home</a>')
+        self.redirect('/')
 
 
 class MainHandler(BaseHandler):
     def get(self):
-        self.write_p(self.session.last_access)
-        self.write_p(self.session.user.userid)
-        self.write_p(self.session.not_exists_attribute)
-        self.write_p(self.session.a.b.c.d.e.f.g.etc.z)
         self.write_p('user' in self.session)
+        self.write_p('last_access' in self.session)
         
         self.write_p('<hr>')
         
         self.session.user = {'userid': 9527}  # this will auto commit
         self.session.last_access = '2014-05-12'  # again
-        
+  
         self.write_p(self.session.user.userid)
         self.write_p(self.session.last_access)
-        self.write_p(self.session.not_exists_attribute)
         self.write_p('user' in self.session)
         
         self.write_p('<hr>')
